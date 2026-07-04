@@ -168,10 +168,15 @@ async function logMovement(uid, name, nationalId, action) {
 //  ROUTES
 // ─────────────────────────────────────────────────────────────
 
+// ─── Root — public student interface ────────────────────────
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // ─── Hidden admin dashboard route ───────────────────────────
-// Serves the PWA entry point only at the secret path read from
-// SECRET_ADMIN_PATH in .env.  Any attempt on /admin returns 404
-// to disguise the existence of the admin interface.
+// Same SPA, also reachable at a non-obvious path from .env.
+// Direct /index2.html and /admin both return 404 to cloak it.
 
 app.get(adminIndexPath, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index2.html'));

@@ -1,6 +1,6 @@
 const CACHE_NAME = 'library-pwa-v1';
 const urlsToCache = [
-  './index2.html',
+  './index.html',
   './style2.css',
   './app2.js',
   './html5_qrcode.min1.js',
