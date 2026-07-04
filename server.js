@@ -123,6 +123,11 @@ if (!fs.existsSync(coversDir)) {
 }
 app.use('/covers', express.static(coversDir));
 
+// Block direct access to the admin HTML file (must go through the secret path)
+app.use('/index2.html', (_req, res) => {
+  res.status(404).send('Page not found');
+});
+
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -130,6 +135,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const SECRET_ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const SECRET_ADMIN_PATH = process.env.SECRET_ADMIN_PATH || '_dashboard';
+const adminIndexPath = `/${SECRET_ADMIN_PATH}`;
 
 const verifyToken = (req, res, next) => {
   const token = req.headers['authorization'];
@@ -161,10 +168,17 @@ async function logMovement(uid, name, nationalId, action) {
 //  ROUTES
 // ─────────────────────────────────────────────────────────────
 
-// ─── GET / — serve the PWA entry point ──────────────────────
+// ─── Hidden admin dashboard route ───────────────────────────
+// Serves the PWA entry point only at the secret path read from
+// SECRET_ADMIN_PATH in .env.  Any attempt on /admin returns 404
+// to disguise the existence of the admin interface.
 
-app.get('/', (req, res) => {
+app.get(adminIndexPath, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index2.html'));
+});
+
+app.use('/admin', (_req, res) => {
+  res.status(404).send('Page not found');
 });
 
 // ─── POST /api/login — authenticate admin ───────────────────
