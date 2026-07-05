@@ -2701,6 +2701,10 @@ const cameraCanvas = document.getElementById('cameraCanvas');
 const capturePhotoBtn = document.getElementById('capturePhotoBtn');
 const retakePhotoBtn = document.getElementById('retakePhotoBtn');
 
+const hasCameraSection = step1Barcode && step2Cover && cameraVideo && cameraCanvas && capturePhotoBtn && retakePhotoBtn;
+
+if (hasCameraSection) {
+
 function openCameraModal() {
   elements.cameraModal.classList.remove('hidden');
   document.body.classList.add('modal-open');
@@ -2791,6 +2795,8 @@ retakePhotoBtn.addEventListener('click', () => {
   capturePhotoBtn.classList.remove('hidden');
   retakePhotoBtn.classList.add('hidden');
 });
+
+}
 
 function closeCameraModal() {
   if (adminHtml5QrcodeScanner) adminHtml5QrcodeScanner.clear().catch(e => {});
