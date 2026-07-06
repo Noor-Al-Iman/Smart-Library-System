@@ -2,8 +2,7 @@
 // Tarshid (ترشيد) Smart Library — ESP32 Firmware
 // ============================================================
 // Connects to Wi-Fi, reads RFID cards via MFRC522, sends UIDs
-// to the Node.js backend over HTTPS (ngrok tunnel), and
-// maintains a WebSocket connection for live status updates.
+// to the Node.js backend over HTTPS via ngrok tunnel.
 //
 // Hardware pinout (typical):
 //   MFRC522 RFID Reader  →  ESP32
@@ -16,27 +15,24 @@
 //   RST                  →  GPIO 22
 //   3.3V                 →  3.3V
 //
-// On‑board LED (status)  →  GPIO 2
+// Buzzer + onboard LED   →  GPIO 2
 // ============================================================
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <MFRC522.h>
 
 // ─── Function prototypes ────────────────────────────────────
 void connectWiFi();
-void connectWebSocket();
-void webSocketEvent(WStype_t type, uint8_t* payload, size_t length);
 String readRFID();
 void sendRFID(String uid);
 
 // ─── Wi-Fi credentials (change before upload) ───────────────
-const char* WIFI_SSID     = "FCI";
-const char* WIFI_PASSWORD = "waleed2233";
+const char* WIFI_SSID     = "";
+const char* WIFI_PASSWORD = "";
 
 // ─── Server endpoints ───────────────────────────────────────
 // ngrok URL (public) — change when tunnel restarts
@@ -46,9 +42,6 @@ const int   SERVER_PORT   = 443;  // HTTPS
 // REST endpoint (POST RFID scans)
 const String RFID_ENDPOINT = "/hardware/rfid";
 
-// WebSocket path (for live status)
-const String WS_PATH       = "/ws";
-
 // ─── RFID config ────────────────────────────────────────────
 #define RST_PIN  22
 #define SS_PIN   5
@@ -56,12 +49,6 @@ MFRC522 rfid(SS_PIN, RST_PIN);
 
 // ─── Buzzer pin (shared with onboard LED) ───────────────────
 #define BUZZER_PIN 2
-
-// ─── Globals ────────────────────────────────────────────────
-WebSocketsClient webSocket;
-unsigned long lastReconnectAttempt = 0;
-const unsigned long WS_RECONNECT_INTERVAL = 5000;  // 5 seconds
-bool wsConnected = false;
 
 // ============================================================
 //  SETUP
@@ -78,9 +65,6 @@ void setup() {
 
   // ── Connect Wi‑Fi ──
   connectWiFi();
-
-  // ── Connect WebSocket ──
-  connectWebSocket();
 }
 
 // ============================================================
@@ -93,15 +77,9 @@ void loop() {
     connectWiFi();
   }
 
-  // ── Keep WebSocket alive ──
-  webSocket.loop();
-  if (!wsConnected && (millis() - lastReconnectAttempt > WS_RECONNECT_INTERVAL)) {
-    lastReconnectAttempt = millis();
-    connectWebSocket();
-  }
-
   // ── Check for new RFID card ──
   if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+    Serial.println("Card detected! Reading UID...");
     String uid = readRFID();
     Serial.println("📇 Card detected: " + uid);
     sendRFID(uid);
@@ -133,64 +111,9 @@ void connectWiFi() {
     Serial.println("\n✅ Wi‑Fi connected");
     Serial.print("   IP address: ");
     Serial.println(WiFi.localIP());
-    digitalWrite(BUZZER_PIN, HIGH);
   } else {
     Serial.println("\n❌ Wi‑Fi connection failed. Restarting...");
     ESP.restart();
-  }
-}
-
-// ============================================================
-//  WebSocket CLIENT
-// ============================================================
-void connectWebSocket() {
-  Serial.println("🔗 Connecting WebSocket...");
-  webSocket.beginSSL(SERVER_HOST, SERVER_PORT, WS_PATH);
-  webSocket.onEvent(webSocketEvent);
-  webSocket.setReconnectInterval(5000);
-}
-
-void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
-  switch (type) {
-    case WStype_DISCONNECTED:
-      Serial.println("❌ WebSocket disconnected");
-      wsConnected = false;
-      break;
-
-    case WStype_CONNECTED:
-      Serial.println("✅ WebSocket connected");
-      wsConnected = true;
-      break;
-
-    case WStype_TEXT: {
-      // Parse incoming JSON (e.g., crowd level, status updates)
-      JsonDocument doc;
-      DeserializationError error = deserializeJson(doc, payload, length);
-      if (error) {
-        Serial.print("⚠️ WebSocket JSON parse error: ");
-        Serial.println(error.c_str());
-        return;
-      }
-      const char* type = doc["type"];
-      if (type) {
-        Serial.print("📩 WS message type: ");
-        Serial.println(type);
-        // Example: flash LED on status updates
-        if (strcmp(type, "status_update") == 0) {
-          digitalWrite(BUZZER_PIN, HIGH);
-          delay(100);
-          digitalWrite(BUZZER_PIN, LOW);
-        }
-      }
-      break;
-    }
-
-    case WStype_ERROR:
-      Serial.println("⚠️ WebSocket error");
-      break;
-
-    default:
-      break;
   }
 }
 
@@ -236,6 +159,8 @@ void sendRFID(String uid) {
   Serial.println(jsonPayload);
 
   int httpCode = http.POST(jsonPayload);
+  Serial.print("HTTP Response code: ");
+  Serial.println(httpCode);
   String response = http.getString();
 
   if (httpCode > 0) {
