@@ -3307,24 +3307,27 @@ async function handleEditBookSubmit(event) {
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 let gateway = `${wsProtocol}//${window.location.host}/ws`;
 let websocket;
-let wsReconnectDelay = 1000;       // تبدأ من 1 ثانية
-const WS_RECONNECT_MAX = 30000;    // حد أقصى 30 ثانية
+let wsReconnectDelay = 1000;
+const WS_RECONNECT_MAX = 30000;
+let wsConnectedAt = 0;
 
 function initWebSocket() {
   console.log('محاولة فتح اتصال WebSocket...');
   websocket = new WebSocket(gateway);
-  
+
   websocket.onopen = () => {
     console.log('✅ تم فتح الاتصال بسيرفر Node.js بنجاح');
-    wsReconnectDelay = 1000;
+    wsConnectedAt = Date.now();
     setConnectionBadge('Connected', 'status-success');
   };
 
   websocket.onclose = () => {
+    const wasStable = wsConnectedAt && (Date.now() - wsConnectedAt > 5000);
+    if (wasStable) wsReconnectDelay = 1000;
     console.log(`❌ تم إغلاق الاتصال، إعادة المحاولة بعد ${wsReconnectDelay / 1000} ثانية...`);
     setConnectionBadge('Offline', 'status-error');
     setTimeout(initWebSocket, wsReconnectDelay);
-    wsReconnectDelay = Math.min(wsReconnectDelay * 2, WS_RECONNECT_MAX); // مضاعفة مع حد أقصى
+    wsReconnectDelay = Math.min(wsReconnectDelay * 2, WS_RECONNECT_MAX);
   };
 
   websocket.onmessage = onMessage;
