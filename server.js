@@ -107,8 +107,21 @@ function notifyNewRfidScan(uid) {
 wss.on('connection', (ws) => {
   console.log('🔗 Browser connected via WebSocket');
   broadcastStatusUpdate();
+  ws._alive = true;
   ws.on('close', () => console.log('❌ Browser disconnected from WebSocket'));
 });
+
+// Heartbeat: send application-level ping every 10 s; terminate unresponsive clients
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach(ws => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    if (ws._alive === false) return ws.terminate();
+    ws._alive = false;
+    try { ws.send(JSON.stringify({ type: "ping" })); } catch (_) { ws.terminate(); }
+  });
+}, 10000);
+
+wss.on('close', () => clearInterval(heartbeatInterval));
 
 // ─── Express middleware ─────────────────────────────────────
 
@@ -439,57 +452,6 @@ app.get('/books', async (req, res) => {
   }
 });
 
-// ─── POST /upload-cover — upload a book cover image ─────────
-// Stores image in Supabase Storage ('book-covers' bucket) and
-// saves the public URL to the `cover_url` column of the book.
-
-app.post('/upload-cover', verifyToken, async (req, res) => {
-  try {
-    const { code, image } = req.body;
-
-    if (!code || !image || typeof image !== 'string') {
-      return res.status(400).json({ message: "البيانات غير مكتملة" });
-    }
-
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-    const buffer = Buffer.from(base64Data, 'base64');
-    const safeCode = String(code).replace(/[^a-zA-Z0-9_-]/g, '');
-    if (!safeCode) {
-      return res.status(400).json({ message: "كود الكتاب غير صالح بعد التنظيف" });
-    }
-
-    const fileName = `${safeCode}.jpg`;
-    const { error: uploadError } = await supabase.storage
-      .from('book-covers')
-      .upload(fileName, buffer, {
-        contentType: 'image/jpeg',
-        upsert: true
-      });
-
-    if (uploadError) throw uploadError;
-
-    const { data: urlData } = supabase.storage
-      .from('book-covers')
-      .getPublicUrl(fileName);
-
-    const publicUrl = urlData?.publicUrl;
-    if (!publicUrl) throw new Error("فشل الحصول على رابط الصورة");
-
-    const { error: updateError } = await supabase
-      .from('books')
-      .update({ cover_url: publicUrl })
-      .eq('code', safeCode);
-
-    if (updateError) throw updateError;
-
-    console.log(`📸 Cover uploaded for book: ${safeCode}`);
-    res.json({ message: "تم حفظ الصورة بنجاح", coverUrl: publicUrl });
-  } catch (error) {
-    console.error("❌ POST /upload-cover error:", error);
-    res.status(500).json({ message: "فشل الحفظ في السيرفر" });
-  }
-});
-
 // ─── GET /status — server health + crowd level ──────────────
 // FIX: crowdLevel is computed from the real DB count of
 // students with status = 'Inside', not from a static variable.
@@ -656,7 +618,7 @@ app.post('/barcode', verifyToken, async (req, res) => {
 
       const { error: updateError } = await supabase
         .from('books')
-        .update({ status: "Available", holder_id: "-" })
+        .update({ status: "Available", holder_id: null })
         .eq('code', code);
 
       if (updateError) throw updateError;

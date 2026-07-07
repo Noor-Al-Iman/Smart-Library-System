@@ -1,7 +1,10 @@
 
 const APP_CONFIG = {
-  apiBase: "", // الرابط الجديد للسيرفر
+  apiBase: "",
   refreshIntervalMs: 5000,
+  supabaseUrl: "https://ywrpsyipjgjhpagkqdvo.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3cnBzeWlwamdqaHBhZ2txZHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNDU0NjEsImV4cCI6MjA5MzgyMTQ2MX0.QS4Krr7UozXreTkDY69Zw5YlTVffKT3P04LqClArhsY", // ← paste your anon key from Supabase Settings → API
+  supabaseCoverBase: "https://ywrpsyipjgjhpagkqdvo.supabase.co/storage/v1/object/public/book-covers",
 };
 
 
@@ -20,11 +23,17 @@ const THEME_ICONS = {
   dark: "M12 2a1 1 0 0 1 1 1v1.05a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 16a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1Zm10-7a1 1 0 1 1 0 2h-1a1 1 0 1 1 0-2h1ZM4 11a1 1 0 1 1 0 2H3a1 1 0 1 1 0-2h1Zm15.07-6.07a1 1 0 0 1 1.41 1.41l-.74.74a1 1 0 0 1-1.41-1.41l.74-.74ZM6.08 17.92a1 1 0 0 1 1.41 1.41l-.74.74a1 1 0 0 1-1.41-1.41l.74-.74Zm13.66 2.15a1 1 0 0 1-1.41 0l-.74-.74A1 1 0 0 1 19 17.92l.74.74a1 1 0 0 1 0 1.41ZM7.49 6.08a1 1 0 0 1 0 1.41l-.74.74a1 1 0 1 1-1.41-1.41l.74-.74a1 1 0 0 1 1.41 0ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z",
 };
 
+// Safe element getter for admin-only elements that may not exist in student view.
+// Returns a no-op dummy so downstream code never throws on null references.
+function _$(id) {
+  const el = document.getElementById(id);
+  if (el) return el;
+  return { classList: { add(){}, remove(){}, contains(){return false}, toggle(){} }, addEventListener(){}, removeEventListener(){}, focus(){}, style:{}, dataset:{}, value:'', textContent:'', innerHTML:'' };
+}
+
 const translations = {
   ar: {
     pageTitle: "لوحة المكتبة الذكية",
-    simulateNewRfid: "بطاقة جديدة",
-    simulateExistingRfid: "بطاقة مسجلة",
     editBookTitleText: "تعديل بيانات الكتاب",
     enterNewBookTitle: "أدخل عنوان الكتاب الجديد",
     navPrimary: "التنقل الرئيسي",
@@ -280,8 +289,6 @@ const translations = {
   },
   en: {
     pageTitle: "Smart Library Dashboard",
-    simulateNewRfid: "New Card",
-    simulateExistingRfid: "Existing Card",
     editBookTitleText: "Edit Book Details",
     enterNewBookTitle: "Enter new book title",
     navPrimary: "Primary",
@@ -576,21 +583,21 @@ const elements = {
   bookSearchInput: document.getElementById("bookSearchInput"),
   logSearchInput: document.getElementById("logSearchInput"),
   appShell: document.getElementById("appShell"),
-  loginForm: document.getElementById("loginForm"),
-  loginError: document.getElementById("loginError"),
-  usernameInput: document.getElementById("usernameInput"),
-  passwordInput: document.getElementById("passwordInput"),
+  loginForm: _$("loginForm"),
+  loginError: _$("loginError"),
+  usernameInput: _$("usernameInput"),
+  passwordInput: _$("passwordInput"),
   refreshButton: document.getElementById("refreshButton"),
   themeToggleButton: document.getElementById("themeToggleButton"),
   themeToggleLabel: document.getElementById("themeToggleLabel"),
   themeToggleIcon: document.getElementById("themeToggleIcon"),
   languageToggleButton: document.getElementById("languageToggleButton"),
   languageToggleLabel: document.getElementById("languageToggleLabel"),
-  adminLoginButton: document.getElementById("adminLoginButton"),
-  logoutButton: document.getElementById("logoutButton"),
-  adminProfile: document.getElementById("adminProfile"),
-  loginModal: document.getElementById("loginModal"),
-  closeLoginModalButton: document.getElementById("closeLoginModalButton"),
+  adminLoginButton: _$("adminLoginButton"),
+  logoutButton: _$("logoutButton"),
+  adminProfile: _$("adminProfile"),
+  loginModal: _$("loginModal"),
+  closeLoginModalButton: _$("closeLoginModalButton"),
   modalCloseTargets: Array.from(document.querySelectorAll("[data-close-modal='true']")),
   connectionBadge: document.getElementById("connectionBadge"),
   crowdBadge: document.getElementById("crowdBadge"),
@@ -985,8 +992,6 @@ function applyStaticTranslations() {
     ["#confirmBorrow", "confirmBorrow"],
     ["#borrowStep3 .success-message", "borrowSuccessful"],
     ["#closeBorrowSuccess", "done"],
-    ["#simulateRfidBtn", "simulateNewRfid"],
-    ["#simulateExistingRfidBtn", "simulateExistingRfid"],
     ["#editBookModalTitle", "editBookTitleText"],
     ["#editBookForm .field:nth-child(1) span", "bookCode"],
     ["#editBookForm .field:nth-child(2) span", "title"],
@@ -1572,9 +1577,20 @@ function setStudentRegistryBusy(busy) {
 
 function populateStudentRegistry(student, exists = false) {
   state.selectedStudent = student;
+  const active = document.activeElement;
+
   if (elements.studentUidInput) elements.studentUidInput.value = student.uid;
-  if (elements.studentRegistryNameInput) elements.studentRegistryNameInput.value = student.name === "Unknown Student" ? "" : student.name;
-  if (elements.studentNationalIdInput) elements.studentNationalIdInput.value = student.nationalId === "-" ? "" : student.nationalId;
+
+  const nameInput = elements.studentRegistryNameInput;
+  if (nameInput && active !== nameInput) {
+    nameInput.value = student.name === "Unknown Student" ? "" : student.name;
+  }
+
+  const nidInput = elements.studentNationalIdInput;
+  if (nidInput && active !== nidInput) {
+    nidInput.value = student.nationalId === "-" ? "" : student.nationalId;
+  }
+
   if (elements.studentLastSeenInput) {
     elements.studentLastSeenInput.value = student.lastSeen && student.lastSeen !== "-" ? formatDateTimeCompact(student.lastSeen) : "-";
   }
@@ -1984,6 +2000,10 @@ function renderStatus() {
 
 function renderStudentRegistry() {
   if (!elements.studentRegistryStatus) return;
+  const active = document.activeElement;
+  const editingName = elements.studentRegistryNameInput && active === elements.studentRegistryNameInput;
+  const editingNid = elements.studentNationalIdInput && active === elements.studentNationalIdInput;
+  if (editingName || editingNid) return;
   if (!state.selectedStudent) {
     resetStudentRegistry();
     return;
@@ -2180,7 +2200,7 @@ function showBookCard(e, book, color) {
   card.classList.add('show');
   
   // 2. مسار الصورة والطبقات الثلاث (لضمان ظهور النص حتى لو الصورة مفقودة)
-  const coverSource = book.coverUrl || `${APP_CONFIG.apiBase}/covers/${encodeURIComponent(book.code)}.jpg?t=${Date.now()}`;
+  const coverSource = book.coverUrl || `${APP_CONFIG.supabaseCoverBase}/${encodeURIComponent(book.code)}.jpg`;
   cover.style.backgroundColor = color;
   
   // 💡 تم إصلاح اسم المتغير وإزالة الفاصلة الزائدة، وإضافة خصائص ضبط حجم الصورة
@@ -2822,23 +2842,30 @@ async function handleCameraBookSubmit(event) {
   submitBtn.textContent = "جارٍ الحفظ...";
 
   try {
-    // 1. إرسال بيانات الكتاب (تم إضافة author هنا)
+    // 1. إرسال بيانات الكتاب
     await fetchJson('/barcode', {
       method: 'POST',
       body: JSON.stringify({ code, title, author, action: 'add' })
     });
 
-    // 2. إرسال صورة الغلاف
-    await fetchJson('/upload-cover', {
+    // 2. رفع الصورة مباشرة إلى Supabase Storage من المتصفح
+    const imageBlob = await fetch(imageData).then(r => r.blob());
+    const uploadRes = await fetch(`${APP_CONFIG.supabaseUrl}/storage/v1/object/book-covers/${encodeURIComponent(code)}.jpg`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: code, image: imageData })
+      headers: {
+        'Authorization': `Bearer ${APP_CONFIG.supabaseAnonKey}`,
+        'Content-Type': 'image/jpeg',
+      },
+      body: imageBlob,
     });
+    if (!uploadRes.ok) {
+      const errBody = await uploadRes.json().catch(() => ({}));
+      throw new Error(errBody.message || `رفع الصورة فشل (${uploadRes.status})`);
+    }
 
-    // إذا وصلنا هنا، فالعمليتان نجحتا (لأن fetchJson ترمي خطأ عند الفشل)
     showToast("✅ تمت إضافة الكتاب وحفظ الغلاف بنجاح");
     closeCameraModal();
-    await loadDashboardData(); // لتحديث الرف وظهور الصورة فوراً
+    await loadDashboardData();
 
   } catch (error) {
     console.error("Save Book Error:", error);
@@ -3280,6 +3307,8 @@ async function handleEditBookSubmit(event) {
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 let gateway = `${wsProtocol}//${window.location.host}/ws`;
 let websocket;
+let wsReconnectDelay = 1000;       // تبدأ من 1 ثانية
+const WS_RECONNECT_MAX = 30000;    // حد أقصى 30 ثانية
 
 function initWebSocket() {
   console.log('محاولة فتح اتصال WebSocket...');
@@ -3287,16 +3316,17 @@ function initWebSocket() {
   
   websocket.onopen = () => {
     console.log('✅ تم فتح الاتصال بسيرفر Node.js بنجاح');
+    wsReconnectDelay = 1000;
     setConnectionBadge('Connected', 'status-success');
   };
 
   websocket.onclose = () => {
-    console.log('❌ تم إغلاق الاتصال، جاري إعادة المحاولة خلال 3 ثوانٍ...');
+    console.log(`❌ تم إغلاق الاتصال، إعادة المحاولة بعد ${wsReconnectDelay / 1000} ثانية...`);
     setConnectionBadge('Offline', 'status-error');
-    setTimeout(initWebSocket, 3000);
+    setTimeout(initWebSocket, wsReconnectDelay);
+    wsReconnectDelay = Math.min(wsReconnectDelay * 2, WS_RECONNECT_MAX); // مضاعفة مع حد أقصى
   };
 
-  // 🔴 هنا كان الخطأ! قمنا بربط استقبال الرسائل بالدالة الصحيحة
   websocket.onmessage = onMessage;
 }
 
@@ -3304,43 +3334,42 @@ function initWebSocket() {
 function onMessage(event) {
   try {
     const data = JSON.parse(event.data);
-    console.log("رسالة واردة من السيرفر:", data);
-    
-    // التفاعل بناءً على نوع البيانات المرسلة
+
+    // الرد على ping من السيرفر لإبقاء الاتصال نشطاً
+    if (data.type === "ping") {
+      websocket.send(JSON.stringify({ type: "pong" }));
+      return;
+    }
+
     if (data.type === "rfid_scan") {
+      const uid = data.uid;
+      if (state._lastWsUid === uid) return; // تجاهل تكرار نفس البطاقة
+      state._lastWsUid = uid;
+
       if (isAuthenticated()) {
-        showToast(t("scannedUidReady", { uid: data.uid }));
+        showToast(t("scannedUidReady", { uid }));
       }
 
-      // 1. إدخال الكود تلقائياً في خانة استعارة الكتب
-      let borrowStudentId = document.getElementById("borrowStudentId");
+      const borrowStudentId = document.getElementById("borrowStudentId");
       if (borrowStudentId) {
-          borrowStudentId.value = data.uid;
+        borrowStudentId.value = uid;
       }
 
-      // 2. البحث عن الطالب: هل هو موجود أم جديد؟
-      const existingStudent = state.students.find(s => s.uid === data.uid);
-      const exists = !!existingStudent; 
-      
-      // 3. تجهيز بيانات الطالب (استرجاع القديم أو إنشاء جديد)
-      const mergedStudent = existingStudent || normalizeStudent({ 
-          uid: data.uid, 
-          status: "Inside", 
-          lastSeen: new Date().toISOString() 
+      const existingStudent = state.students.find(s => s.uid === uid);
+      const exists = !!existingStudent;
+      const mergedStudent = existingStudent || normalizeStudent({
+        uid,
+        status: "Inside",
+        lastSeen: new Date().toISOString()
       });
 
-      // 4. السر هنا: حفظ الطالب في الذاكرة المركزية للموقع لمنع مسحه
       state.selectedStudent = mergedStudent;
-
-      // 5. عرض البيانات والأزرار في لوحة التحكم
       populateStudentRegistry(mergedStudent, exists);
 
-      // 6. تحديث الجداول
       if (isAuthenticated()) {
-        loadDashboardData(); 
+        loadDashboardData();
       }
-    } 
-    else if (data.type === "status_update") {
+    } else if (data.type === "status_update") {
       state.status = normalizeStatus(data.payload);
       renderStatus();
     }
@@ -3685,95 +3714,5 @@ document.addEventListener('keypress', (e) => {
       
       rfidBuffer = "";
     }
-  }
-});
-// =========================================================
-// أداة محاكاة قارئ الـ RFID (النسخة المضادة للأخطاء)
-// =========================================================
-document.addEventListener('click', async (e) => {
-  // البحث عن الزر حتى لو ضغطنا على النص أو الأيقونة بداخله
-  const simulateBtn = e.target.closest('#simulateRfidBtn');
-  if (!simulateBtn) return; // إذا لم يكن هو الزر المطلوب، تجاهل الأمر
-
-  // 1. توليد كود RFID عشوائي
-  const chars = '0123456789ABCDEF';
-  let randomUid = '';
-  for (let i = 0; i < 8; i++) {
-    randomUid += chars[Math.floor(Math.random() * chars.length)];
-  }
-
-  // 2. تغيير شكل الزر
-  simulateBtn.disabled = true;
-  const originalText = simulateBtn.innerHTML;
-  simulateBtn.innerHTML = '⏳ جاري المحاكاة...';
-
-  try {
-    // 3. إرسال الطلب للسيرفر
-    const response = await fetch(`${APP_CONFIG.apiBase}/hardware/rfid`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid: randomUid })
-    });
-    
-    if (!response.ok) throw new Error("السيرفر رفض الطلب");
-    
-  } catch (error) {
-    console.error("Simulation failed:", error);
-    if (typeof showToast === 'function') {
-      showToast("فشل الإرسال: تأكد أن السيرفر يعمل", true);
-    } else {
-      alert("فشل الإرسال: تأكد أن السيرفر يعمل");
-    }
-  } finally {
-    // 4. إعادة الزر لشكله الطبيعي
-    simulateBtn.disabled = false;
-    simulateBtn.innerHTML = originalText;
-  }
-});
-// =========================================================
-// أداة محاكاة تمرير بطاقة طالب (مسجل مسبقاً)
-// =========================================================
-document.addEventListener('click', async (e) => {
-  const simulateExistingBtn = e.target.closest('#simulateExistingRfidBtn');
-  if (!simulateExistingBtn) return;
-
-  // 1. التحقق من وجود طلاب مسجلين في النظام
-  if (!state.students || state.students.length === 0) {
-    if (typeof showToast === 'function') {
-      showToast("لا يوجد طلاب مسجلين بعد! أضف طالباً أولاً.", true);
-    } else {
-      alert("لا يوجد طلاب مسجلين بعد!");
-    }
-    return;
-  }
-
-  // 2. اختيار طالب عشوائي من قائمة الطلاب المحملة في الذاكرة
-  const randomStudentIndex = Math.floor(Math.random() * state.students.length);
-  const existingUid = state.students[randomStudentIndex].uid;
-
-  // 3. تغيير شكل الزر لإظهار التحميل
-  simulateExistingBtn.disabled = true;
-  const originalText = simulateExistingBtn.innerHTML;
-  simulateExistingBtn.innerHTML = '⏳ جاري...';
-
-  try {
-    // 4. إرسال رقم الطالب المسجل للسيرفر
-    const response = await fetch(`${APP_CONFIG.apiBase}/hardware/rfid`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid: existingUid })
-    });
-    
-    if (!response.ok) throw new Error("السيرفر رفض الطلب");
-    
-  } catch (error) {
-    console.error("Simulation failed:", error);
-    if (typeof showToast === 'function') {
-      showToast("فشل الإرسال: تأكد أن السيرفر يعمل", true);
-    }
-  } finally {
-    // 5. إعادة الزر لشكله الطبيعي
-    simulateExistingBtn.disabled = false;
-    simulateExistingBtn.innerHTML = originalText;
   }
 });

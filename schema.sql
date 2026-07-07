@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS public.books (
   title      TEXT NOT NULL,               -- book title
   author     TEXT DEFAULT 'Unknown Author',
   status     TEXT DEFAULT 'Available' CHECK (status IN ('Available', 'Borrowed')),
-  holder_id  TEXT DEFAULT '-',            -- UID of current borrower
+  holder_id  TEXT DEFAULT NULL REFERENCES public.students(uid) ON DELETE SET NULL,  -- UID of current borrower
   cover_url  TEXT DEFAULT '',             -- Supabase Storage public URL
   updated_at TIMESTAMPTZ DEFAULT now(),   -- last borrow/return timestamp
   created_at TIMESTAMPTZ DEFAULT now()
