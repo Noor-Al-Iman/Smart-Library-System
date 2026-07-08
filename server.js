@@ -1,5 +1,5 @@
 // ============================================================
-// Tarshid (ترشيد) Smart Library — Node.js Backend Server
+// Smart Library System — Node.js Backend Server
 // ============================================================
 //
 // This server provides:
@@ -641,7 +641,7 @@ app.post('/barcode', verifyToken, async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`=================================`);
-  console.log(`🚀 Tarshid Server running on: http://localhost:${PORT}`);
+  console.log(`🚀 Smart Library System running on: http://localhost:${PORT}`);
   console.log(`🔗 WebSocket: ws://localhost:${PORT}/ws`);
   console.log(`=================================`);
 });

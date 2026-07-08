@@ -1,5 +1,5 @@
 // ============================================================
-// Tarshid (ترشيد) Smart Library — ESP32 Firmware
+// Smart Library System — ESP32 Firmware
 // ============================================================
 // Connects to Wi-Fi, reads RFID cards via MFRC522, sends UIDs
 // to the Node.js backend over HTTPS via ngrok tunnel.
